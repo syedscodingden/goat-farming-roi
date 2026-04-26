@@ -1,65 +1,183 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState } from "react";
+import {
+  ShoppingCart,
+  Wrench,
+  Clock,
+  TrendingUp,
+} from "lucide-react";
+import { InputSection, InputRow, NumberInput, SliderInput } from "@/app/components/InputSection";
+import { SummaryCard } from "@/app/components/SummaryCard";
+import { CostTable } from "@/app/components/CostTable";
+import {
+  calculate,
+  getCostBreakdown,
+  DEFAULT_INPUTS,
+  type GoatInputs,
+} from "@/app/lib/calculator";
+
+export default function Page() {
+  const [inputs, setInputs] = useState<GoatInputs>(DEFAULT_INPUTS);
+
+  const result = calculate(inputs);
+  const costRows = getCostBreakdown(inputs, result);
+
+  function set<K extends keyof GoatInputs>(key: K, value: GoatInputs[K]) {
+    setInputs((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleReset() {
+    setInputs(DEFAULT_INPUTS);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* Header */}
+      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-slate-100">
+              Goat Farming ROI Calculator
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Capital requirements, recurring costs &amp; net profit analysis
+            </p>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live Calculation
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      </header>
+
+      {/* Main Layout */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
+          {/* Left Column: Inputs */}
+          <div className="grid gap-6">
+            {/* Acquisition */}
+            <InputSection title="Acquisition Costs" icon={ShoppingCart}>
+              <InputRow label="Number of Goats">
+                <NumberInput
+                  value={inputs.numGoats}
+                  onChange={(v) => set("numGoats", v)}
+                  min={1}
+                />
+              </InputRow>
+              <div className="grid grid-cols-2 gap-4">
+                <InputRow label="Cost per Goat" hint="purchase price">
+                  <NumberInput
+                    value={inputs.costPerGoat}
+                    onChange={(v) => set("costPerGoat", v)}
+                    prefix="₹"
+                  />
+                </InputRow>
+                <InputRow label="Transport &amp; Loading">
+                  <NumberInput
+                    value={inputs.transportFees}
+                    onChange={(v) => set("transportFees", v)}
+                    prefix="₹"
+                  />
+                </InputRow>
+              </div>
+            </InputSection>
+
+            {/* Operational */}
+            <InputSection title="Operational Costs (Recurring)" icon={Wrench}>
+              <div className="grid grid-cols-2 gap-4">
+                <InputRow label="Feed / Fodder" hint="per goat / day">
+                  <NumberInput
+                    value={inputs.feedPerGoatPerDay}
+                    onChange={(v) => set("feedPerGoatPerDay", v)}
+                    prefix="₹"
+                    step={5}
+                  />
+                </InputRow>
+                <InputRow label="Medical &amp; Vaccination" hint="per goat (total)">
+                  <NumberInput
+                    value={inputs.medicalPerGoat}
+                    onChange={(v) => set("medicalPerGoat", v)}
+                    prefix="₹"
+                  />
+                </InputRow>
+                <InputRow label="Labor Cost" hint="per day">
+                  <NumberInput
+                    value={inputs.laborDaily}
+                    onChange={(v) => set("laborDaily", v)}
+                    prefix="₹"
+                    suffix="/day"
+                  />
+                </InputRow>
+                <InputRow label="Misc / Maintenance" hint="per day">
+                  <NumberInput
+                    value={inputs.miscDaily}
+                    onChange={(v) => set("miscDaily", v)}
+                    prefix="₹"
+                    suffix="/day"
+                  />
+                </InputRow>
+              </div>
+            </InputSection>
+
+            {/* Timeframe */}
+            <InputSection title="Timeframe" icon={Clock}>
+              <InputRow
+                label="Rearing Period"
+                hint="multiplies all daily recurring costs"
+              >
+                <NumberInput
+                  value={inputs.rearingDays}
+                  onChange={(v) => set("rearingDays", Math.max(1, v))}
+                  min={1}
+                  max={730}
+                  suffix="days"
+                />
+              </InputRow>
+            </InputSection>
+
+            {/* Revenue */}
+            <InputSection title="Revenue Projections" icon={TrendingUp}>
+              <InputRow label="Selling Price per Goat">
+                <NumberInput
+                  value={inputs.sellingPricePerGoat}
+                  onChange={(v) => set("sellingPricePerGoat", v)}
+                  prefix="₹"
+                />
+              </InputRow>
+              <InputRow
+                label="Mortality Rate"
+                hint={`${result.survivingGoats} of ${inputs.numGoats} expected to survive`}
+              >
+                <SliderInput
+                  value={inputs.mortalityRate}
+                  onChange={(v) => set("mortalityRate", v)}
+                  min={0}
+                  max={50}
+                  step={0.5}
+                />
+              </InputRow>
+            </InputSection>
+
+            {/* Cost Breakdown Table */}
+            <CostTable rows={costRows} result={result} />
+          </div>
+
+          {/* Right Column: Summary */}
+          <div>
+            <SummaryCard
+              inputs={inputs}
+              result={result}
+              onReset={handleReset}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </div>
         </div>
       </main>
+
+      <footer className="border-t border-slate-800 mt-12 py-6 text-center text-xs text-slate-600">
+        Goat Farming ROI Calculator — All figures are estimates for planning
+        purposes only.
+      </footer>
     </div>
   );
 }
