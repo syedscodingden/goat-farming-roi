@@ -44,12 +44,12 @@ export interface CostBreakdownRow {
 // ─── Defaults ────────────────────────────────────────────────────────────────
 
 export const DEFAULT_INPUTS: GoatInputs = {
-  numGoats: 10,
+  numGoats: 100,
   costPerGoat: 9800,
   transportFees: 15000,
-  feedPerGoatPerDay: 50,
+  feedPerGoatPerDay: 20,
   medicalPerGoat: 0,
-  laborDaily: 300,
+  laborDaily: 800,
   miscDaily: 0,
   rearingDays: 25,
   sellingPricePerGoat: 13500,
