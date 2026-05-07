@@ -50,7 +50,7 @@ export function CostTable({ rows, result }: CostTableProps) {
         {/* Revenue Row */}
         <div className="flex justify-between items-center -mt-1">
           <span className="text-sm text-slate-400">
-            Total Revenue ({result.survivingGoats} goats)
+            Total Revenue ({result.totalGoatsSold} goats sold)
           </span>
           <span className="text-sm font-semibold text-emerald-400">
             {formatCurrency(result.totalRevenue)}
