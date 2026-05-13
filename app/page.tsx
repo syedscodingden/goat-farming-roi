@@ -9,9 +9,11 @@ import {
   calculate,
   getCostBreakdown,
   formatCurrency,
+  batchQuantity,
   DEFAULT_INPUTS,
   type GoatInputs,
   type BuyingBatch,
+  type BuyingTier,
   type SellingBatch,
 } from "@/app/lib/calculator";
 
@@ -29,8 +31,7 @@ export default function Page() {
   function addBuyingBatch() {
     const batch: BuyingBatch = {
       id: `buy-${Date.now()}`,
-      quantity: 0,
-      pricePerGoat: 0,
+      tiers: [{ id: `tier-${Date.now()}`, quantity: 0, pricePerGoat: 0 }],
       rearingDays: 25,
       feedPerGoatPerDay: 20,
       medicalPerGoat: 0,
@@ -42,10 +43,39 @@ export default function Page() {
   function removeBuyingBatch(id: string) {
     setInputs((prev) => ({ ...prev, buyingBatches: prev.buyingBatches.filter((b) => b.id !== id) }));
   }
-  function updateBuyingBatch(id: string, field: keyof Omit<BuyingBatch, "id">, value: number) {
+  function updateBuyingBatch(batchId: string, field: keyof Omit<BuyingBatch, "id" | "tiers">, value: number) {
     setInputs((prev) => ({
       ...prev,
-      buyingBatches: prev.buyingBatches.map((b) => (b.id === id ? { ...b, [field]: value } : b)),
+      buyingBatches: prev.buyingBatches.map((b) => (b.id === batchId ? { ...b, [field]: value } : b)),
+    }));
+  }
+
+  // ── Buying tier handlers (nested within a batch) ───────────────────────────
+  function addBuyingTier(batchId: string) {
+    const tier: BuyingTier = { id: `tier-${Date.now()}`, quantity: 0, pricePerGoat: 0 };
+    setInputs((prev) => ({
+      ...prev,
+      buyingBatches: prev.buyingBatches.map((b) =>
+        b.id === batchId ? { ...b, tiers: [...b.tiers, tier] } : b
+      ),
+    }));
+  }
+  function removeBuyingTier(batchId: string, tierId: string) {
+    setInputs((prev) => ({
+      ...prev,
+      buyingBatches: prev.buyingBatches.map((b) =>
+        b.id === batchId ? { ...b, tiers: b.tiers.filter((t) => t.id !== tierId) } : b
+      ),
+    }));
+  }
+  function updateBuyingTier(batchId: string, tierId: string, field: keyof Omit<BuyingTier, "id">, value: number) {
+    setInputs((prev) => ({
+      ...prev,
+      buyingBatches: prev.buyingBatches.map((b) =>
+        b.id === batchId
+          ? { ...b, tiers: b.tiers.map((t) => (t.id === tierId ? { ...t, [field]: value } : t)) }
+          : b
+      ),
     }));
   }
 
@@ -66,7 +96,7 @@ export default function Page() {
 
   function handleReset() { setInputs(DEFAULT_INPUTS); }
 
-  const totalBuyingGoats = inputs.buyingBatches.reduce((s, b) => s + b.quantity, 0);
+  const totalBuyingGoats = inputs.buyingBatches.reduce((s, b) => s + batchQuantity(b), 0);
   const totalSellingAllocated = inputs.sellingBatches.reduce((s, b) => s + b.quantity, 0);
   const sellingDiff = totalSellingAllocated - result.survivingGoats;
 
@@ -97,11 +127,12 @@ export default function Page() {
                   <span className="text-xs font-medium text-sky-400">{totalBuyingGoats} goats total</span>
                 </div>
 
-                {inputs.buyingBatches.map((batch, i) => {
+                {inputs.buyingBatches.map((batch, bi) => {
+                  const qty = batchQuantity(batch);
                   const batchCost =
-                    batch.quantity * batch.pricePerGoat +
-                    batch.feedPerGoatPerDay * batch.quantity * batch.rearingDays +
-                    batch.medicalPerGoat * batch.quantity +
+                    batch.tiers.reduce((s, t) => s + t.quantity * t.pricePerGoat, 0) +
+                    batch.feedPerGoatPerDay * qty * batch.rearingDays +
+                    batch.medicalPerGoat * qty +
                     batch.laborDaily * batch.rearingDays +
                     batch.miscDaily * batch.rearingDays;
 
@@ -110,16 +141,12 @@ export default function Page() {
                       {/* Batch header */}
                       <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800 border-b border-slate-700">
                         <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
-                          Batch {i + 1}
+                          Batch {bi + 1} · {qty} goats
                         </span>
                         <div className="flex items-center gap-3">
                           <span className="text-xs font-mono text-sky-400">= {formatCurrency(batchCost)}</span>
                           {inputs.buyingBatches.length > 1 && (
-                            <button
-                              onClick={() => removeBuyingBatch(batch.id)}
-                              className="text-slate-600 hover:text-red-400 transition-colors"
-                              aria-label="Remove batch"
-                            >
+                            <button onClick={() => removeBuyingBatch(batch.id)} className="text-slate-600 hover:text-red-400 transition-colors" aria-label="Remove batch">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           )}
@@ -127,18 +154,49 @@ export default function Page() {
                       </div>
 
                       <div className="p-4 grid gap-4">
-                        {/* Acquisition row */}
+                        {/* Acquisition tiers */}
                         <div>
                           <p className="text-xs font-semibold text-sky-400 uppercase tracking-wider mb-2">Acquisition</p>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="grid gap-1">
+                          <div className="grid gap-2">
+                            {/* Column headers */}
+                            <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-center px-0.5">
                               <span className="text-xs text-slate-500">Goats</span>
-                              <NumberInput value={batch.quantity} onChange={(v) => updateBuyingBatch(batch.id, "quantity", v)} min={0} />
-                            </div>
-                            <div className="grid gap-1">
                               <span className="text-xs text-slate-500">Price / Goat</span>
-                              <NumberInput value={batch.pricePerGoat} onChange={(v) => updateBuyingBatch(batch.id, "pricePerGoat", v)} prefix="₹" />
+                              <span className="text-xs text-slate-500 text-right w-20">Cost</span>
+                              <span className="w-4" />
                             </div>
+
+                            {batch.tiers.map((tier) => (
+                              <div key={tier.id} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
+                                <NumberInput
+                                  value={tier.quantity}
+                                  onChange={(v) => updateBuyingTier(batch.id, tier.id, "quantity", v)}
+                                  min={0}
+                                />
+                                <NumberInput
+                                  value={tier.pricePerGoat}
+                                  onChange={(v) => updateBuyingTier(batch.id, tier.id, "pricePerGoat", v)}
+                                  prefix="₹"
+                                />
+                                <span className="text-xs font-mono text-sky-400 text-right w-20 tabular-nums">
+                                  {formatCurrency(tier.quantity * tier.pricePerGoat)}
+                                </span>
+                                {batch.tiers.length > 1 ? (
+                                  <button onClick={() => removeBuyingTier(batch.id, tier.id)} className="text-slate-600 hover:text-red-400 transition-colors w-4" aria-label="Remove tier">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <span className="w-4" />
+                                )}
+                              </div>
+                            ))}
+
+                            <button
+                              onClick={() => addBuyingTier(batch.id)}
+                              className="flex items-center justify-center gap-1 rounded-md border border-dashed border-slate-700 py-1.5 text-xs text-slate-600 hover:border-slate-500 hover:text-slate-400 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" /> Add Price Tier
+                            </button>
                           </div>
                         </div>
 
@@ -182,12 +240,10 @@ export default function Page() {
                   onClick={addBuyingBatch}
                   className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-600 py-2.5 text-xs font-medium text-slate-500 hover:border-slate-500 hover:text-slate-300 transition-colors"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Batch
+                  <Plus className="w-3.5 h-3.5" /> Add Batch
                 </button>
               </div>
 
-              {/* Transport — shared across all batches */}
               <InputRow label="Transport &amp; Loading" hint="shared across all batches">
                 <NumberInput value={inputs.transportFees} onChange={(v) => set("transportFees", v)} prefix="₹" />
               </InputRow>
@@ -251,15 +307,11 @@ export default function Page() {
                   onClick={addSellingBatch}
                   className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-600 py-2 text-xs font-medium text-slate-500 hover:border-slate-500 hover:text-slate-300 transition-colors"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Selling Tier
+                  <Plus className="w-3.5 h-3.5" /> Add Selling Tier
                 </button>
               </div>
 
-              <InputRow
-                label="Mortality Rate"
-                hint={`${result.survivingGoats} of ${result.totalGoats} expected to survive`}
-              >
+              <InputRow label="Mortality Rate" hint={`${result.survivingGoats} of ${result.totalGoats} expected to survive`}>
                 <SliderInput value={inputs.mortalityRate} onChange={(v) => set("mortalityRate", v)} min={0} max={50} step={0.5} />
               </InputRow>
             </InputSection>
