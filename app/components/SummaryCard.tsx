@@ -103,7 +103,7 @@ export function SummaryCard({ inputs, result, onReset }: SummaryCardProps) {
         <StatTile
           icon={isProfit ? TrendingUp : TrendingDown}
           label="Surviving Goats"
-          value={`${result.survivingGoats} of ${inputs.numGoats}`}
+          value={`${result.survivingGoats} of ${result.totalGoats}`}
           accent="text-slate-300"
         />
       </div>

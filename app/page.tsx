@@ -19,6 +19,7 @@ import {
   formatCurrency,
   DEFAULT_INPUTS,
   type GoatInputs,
+  type BuyingBatch,
   type SellingBatch,
 } from "@/app/lib/calculator";
 
@@ -32,31 +33,33 @@ export default function Page() {
     setInputs((prev) => ({ ...prev, [key]: value }));
   }
 
-  function addBatch() {
-    const newBatch: SellingBatch = {
-      id: `batch-${Date.now()}`,
-      quantity: 0,
-      pricePerGoat: 0,
-    };
+  // ── Buying batch handlers ──────────────────────────────────────────────────
+  function addBuyingBatch() {
+    const batch: BuyingBatch = { id: `buy-${Date.now()}`, quantity: 0, pricePerGoat: 0 };
+    setInputs((prev) => ({ ...prev, buyingBatches: [...prev.buyingBatches, batch] }));
+  }
+  function removeBuyingBatch(id: string) {
+    setInputs((prev) => ({ ...prev, buyingBatches: prev.buyingBatches.filter((b) => b.id !== id) }));
+  }
+  function updateBuyingBatch(id: string, field: keyof Omit<BuyingBatch, "id">, value: number) {
     setInputs((prev) => ({
       ...prev,
-      sellingBatches: [...prev.sellingBatches, newBatch],
+      buyingBatches: prev.buyingBatches.map((b) => (b.id === id ? { ...b, [field]: value } : b)),
     }));
   }
 
-  function removeBatch(id: string) {
-    setInputs((prev) => ({
-      ...prev,
-      sellingBatches: prev.sellingBatches.filter((b) => b.id !== id),
-    }));
+  // ── Selling batch handlers ─────────────────────────────────────────────────
+  function addSellingBatch() {
+    const batch: SellingBatch = { id: `sell-${Date.now()}`, quantity: 0, pricePerGoat: 0 };
+    setInputs((prev) => ({ ...prev, sellingBatches: [...prev.sellingBatches, batch] }));
   }
-
-  function updateBatch(id: string, field: keyof Omit<SellingBatch, "id">, value: number) {
+  function removeSellingBatch(id: string) {
+    setInputs((prev) => ({ ...prev, sellingBatches: prev.sellingBatches.filter((b) => b.id !== id) }));
+  }
+  function updateSellingBatch(id: string, field: keyof Omit<SellingBatch, "id">, value: number) {
     setInputs((prev) => ({
       ...prev,
-      sellingBatches: prev.sellingBatches.map((b) =>
-        b.id === id ? { ...b, [field]: value } : b
-      ),
+      sellingBatches: prev.sellingBatches.map((b) => (b.id === id ? { ...b, [field]: value } : b)),
     }));
   }
 
@@ -64,8 +67,9 @@ export default function Page() {
     setInputs(DEFAULT_INPUTS);
   }
 
-  const totalAllocated = inputs.sellingBatches.reduce((s, b) => s + b.quantity, 0);
-  const allocationDiff = totalAllocated - result.survivingGoats;
+  const totalBuyingAllocated = inputs.buyingBatches.reduce((s, b) => s + b.quantity, 0);
+  const totalSellingAllocated = inputs.sellingBatches.reduce((s, b) => s + b.quantity, 0);
+  const sellingDiff = totalSellingAllocated - result.survivingGoats;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -92,31 +96,87 @@ export default function Page() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
           {/* Left Column: Inputs */}
           <div className="grid gap-6">
+
             {/* Acquisition */}
             <InputSection title="Acquisition Costs" icon={ShoppingCart}>
-              <InputRow label="Number of Goats">
+              {/* Buying Price Tiers */}
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-300">
+                    Buying Price Tiers
+                  </label>
+                  <span className="text-xs font-medium text-sky-400">
+                    {totalBuyingAllocated} goats total
+                  </span>
+                </div>
+
+                <div className="grid gap-2">
+                  {inputs.buyingBatches.map((batch, i) => {
+                    const batchCost = batch.quantity * batch.pricePerGoat;
+                    return (
+                      <div
+                        key={batch.id}
+                        className="rounded-lg border border-slate-700 bg-slate-900 p-3 grid gap-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                            Tier {i + 1}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-mono text-sky-400">
+                              = {formatCurrency(batchCost)}
+                            </span>
+                            {inputs.buyingBatches.length > 1 && (
+                              <button
+                                onClick={() => removeBuyingBatch(batch.id)}
+                                className="text-slate-600 hover:text-red-400 transition-colors"
+                                aria-label="Remove tier"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="grid gap-1">
+                            <span className="text-xs text-slate-500">Goats</span>
+                            <NumberInput
+                              value={batch.quantity}
+                              onChange={(v) => updateBuyingBatch(batch.id, "quantity", v)}
+                              min={0}
+                            />
+                          </div>
+                          <div className="grid gap-1">
+                            <span className="text-xs text-slate-500">Price / Goat</span>
+                            <NumberInput
+                              value={batch.pricePerGoat}
+                              onChange={(v) => updateBuyingBatch(batch.id, "pricePerGoat", v)}
+                              prefix="₹"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={addBuyingBatch}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-600 py-2 text-xs font-medium text-slate-500 hover:border-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Buying Tier
+                </button>
+              </div>
+
+              {/* Transport */}
+              <InputRow label="Transport &amp; Loading">
                 <NumberInput
-                  value={inputs.numGoats}
-                  onChange={(v) => set("numGoats", v)}
-                  min={1}
+                  value={inputs.transportFees}
+                  onChange={(v) => set("transportFees", v)}
+                  prefix="₹"
                 />
               </InputRow>
-              <div className="grid grid-cols-2 gap-4">
-                <InputRow label="Cost per Goat" hint="purchase price">
-                  <NumberInput
-                    value={inputs.costPerGoat}
-                    onChange={(v) => set("costPerGoat", v)}
-                    prefix="₹"
-                  />
-                </InputRow>
-                <InputRow label="Transport &amp; Loading">
-                  <NumberInput
-                    value={inputs.transportFees}
-                    onChange={(v) => set("transportFees", v)}
-                    prefix="₹"
-                  />
-                </InputRow>
-              </div>
             </InputSection>
 
             {/* Operational */}
@@ -158,10 +218,7 @@ export default function Page() {
 
             {/* Timeframe */}
             <InputSection title="Timeframe" icon={Clock}>
-              <InputRow
-                label="Rearing Period"
-                hint="multiplies all daily recurring costs"
-              >
+              <InputRow label="Rearing Period" hint="multiplies all daily recurring costs">
                 <NumberInput
                   value={inputs.rearingDays}
                   onChange={(v) => set("rearingDays", Math.max(1, v))}
@@ -184,7 +241,7 @@ export default function Page() {
                 </InputRow>
                 <InputRow
                   label="Cost per Lost Goat"
-                  hint={`${inputs.numGoats - result.survivingGoats} goats lost`}
+                  hint={`${result.lostGoats} goats lost`}
                 >
                   <NumberInput
                     value={inputs.costPerLostGoat}
@@ -203,23 +260,21 @@ export default function Page() {
                   <label className="text-sm font-medium text-slate-300">
                     Selling Price Tiers
                   </label>
-                  {/* Allocation status badge */}
-                  {allocationDiff === 0 ? (
+                  {sellingDiff === 0 ? (
                     <span className="text-xs font-medium text-emerald-400">
-                      {totalAllocated} / {result.survivingGoats} goats allocated ✓
+                      {totalSellingAllocated} / {result.survivingGoats} goats allocated ✓
                     </span>
-                  ) : allocationDiff < 0 ? (
+                  ) : sellingDiff < 0 ? (
                     <span className="text-xs font-medium text-amber-400">
-                      {Math.abs(allocationDiff)} goats unallocated
+                      {Math.abs(sellingDiff)} goats unallocated
                     </span>
                   ) : (
                     <span className="text-xs font-medium text-red-400">
-                      {allocationDiff} over surviving count
+                      {sellingDiff} over surviving count
                     </span>
                   )}
                 </div>
 
-                {/* Batch rows */}
                 <div className="grid gap-2">
                   {inputs.sellingBatches.map((batch, i) => {
                     const batchRevenue = batch.quantity * batch.pricePerGoat;
@@ -238,7 +293,7 @@ export default function Page() {
                             </span>
                             {inputs.sellingBatches.length > 1 && (
                               <button
-                                onClick={() => removeBatch(batch.id)}
+                                onClick={() => removeSellingBatch(batch.id)}
                                 className="text-slate-600 hover:text-red-400 transition-colors"
                                 aria-label="Remove tier"
                               >
@@ -252,7 +307,7 @@ export default function Page() {
                             <span className="text-xs text-slate-500">Goats</span>
                             <NumberInput
                               value={batch.quantity}
-                              onChange={(v) => updateBatch(batch.id, "quantity", v)}
+                              onChange={(v) => updateSellingBatch(batch.id, "quantity", v)}
                               min={0}
                             />
                           </div>
@@ -260,7 +315,7 @@ export default function Page() {
                             <span className="text-xs text-slate-500">Price / Goat</span>
                             <NumberInput
                               value={batch.pricePerGoat}
-                              onChange={(v) => updateBatch(batch.id, "pricePerGoat", v)}
+                              onChange={(v) => updateSellingBatch(batch.id, "pricePerGoat", v)}
                               prefix="₹"
                             />
                           </div>
@@ -271,18 +326,18 @@ export default function Page() {
                 </div>
 
                 <button
-                  onClick={addBatch}
+                  onClick={addSellingBatch}
                   className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-600 py-2 text-xs font-medium text-slate-500 hover:border-slate-500 hover:text-slate-300 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add Price Tier
+                  Add Selling Tier
                 </button>
               </div>
 
               {/* Mortality Rate */}
               <InputRow
                 label="Mortality Rate"
-                hint={`${result.survivingGoats} of ${inputs.numGoats} expected to survive`}
+                hint={`${result.survivingGoats} of ${result.totalGoats} expected to survive`}
               >
                 <SliderInput
                   value={inputs.mortalityRate}

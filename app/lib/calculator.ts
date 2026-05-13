@@ -1,5 +1,11 @@
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export interface BuyingBatch {
+  id: string;
+  quantity: number;
+  pricePerGoat: number;
+}
+
 export interface SellingBatch {
   id: string;
   quantity: number;
@@ -8,8 +14,7 @@ export interface SellingBatch {
 
 export interface GoatInputs {
   // Acquisition
-  numGoats: number;
-  costPerGoat: number;
+  buyingBatches: BuyingBatch[];
   transportFees: number;
 
   // Operational (all daily rates)
@@ -21,16 +26,17 @@ export interface GoatInputs {
   // Timeframe
   rearingDays: number;
 
-  // Revenue
-  sellingBatches: SellingBatch[];
-  mortalityRate: number;
-
   // Additional
   splitwiseCost: number;
   costPerLostGoat: number;
+
+  // Revenue
+  sellingBatches: SellingBatch[];
+  mortalityRate: number;
 }
 
 export interface CalculationResult {
+  totalGoats: number;
   survivingGoats: number;
   acquisitionCost: number;
   feedCost: number;
@@ -38,6 +44,9 @@ export interface CalculationResult {
   laborCost: number;
   miscCost: number;
   operationalCost: number;
+  lostGoats: number;
+  lostGoatsCost: number;
+  additionalCost: number;
   totalInvestment: number;
   totalRevenue: number;
   netProfit: number;
@@ -45,9 +54,6 @@ export interface CalculationResult {
   breakEven: number;
   totalGoatsSold: number;
   unsoldGoats: number;
-  lostGoats: number;
-  lostGoatsCost: number;
-  additionalCost: number;
 }
 
 export interface CostBreakdownRow {
@@ -59,43 +65,44 @@ export interface CostBreakdownRow {
 // ─── Defaults ────────────────────────────────────────────────────────────────
 
 export const DEFAULT_INPUTS: GoatInputs = {
-  numGoats: 100,
-  costPerGoat: 9800,
+  buyingBatches: [{ id: "default-buy", quantity: 100, pricePerGoat: 9800 }],
   transportFees: 15000,
   feedPerGoatPerDay: 20,
   medicalPerGoat: 0,
   laborDaily: 800,
   miscDaily: 0,
   rearingDays: 25,
-  sellingBatches: [{ id: "default", quantity: 100, pricePerGoat: 13500 }],
-  mortalityRate: 0,
   splitwiseCost: 0,
   costPerLostGoat: 0,
+  sellingBatches: [{ id: "default-sell", quantity: 100, pricePerGoat: 13500 }],
+  mortalityRate: 0,
 };
 
 // ─── Core Calculation Logic ───────────────────────────────────────────────────
 
 export function calculate(inputs: GoatInputs): CalculationResult {
-  const survivingGoats = Math.floor(
-    inputs.numGoats * (1 - inputs.mortalityRate / 100)
+  const totalGoats = inputs.buyingBatches.reduce((s, b) => s + b.quantity, 0);
+  const survivingGoats = Math.floor(totalGoats * (1 - inputs.mortalityRate / 100));
+
+  const goatPurchaseCost = inputs.buyingBatches.reduce(
+    (s, b) => s + b.quantity * b.pricePerGoat,
+    0
   );
+  const acquisitionCost = goatPurchaseCost + inputs.transportFees;
 
-  const acquisitionCost =
-    inputs.numGoats * inputs.costPerGoat + inputs.transportFees;
-
-  const feedCost = inputs.feedPerGoatPerDay * inputs.numGoats * inputs.rearingDays;
-  const medicalCost = inputs.medicalPerGoat * inputs.numGoats;
+  const feedCost = inputs.feedPerGoatPerDay * totalGoats * inputs.rearingDays;
+  const medicalCost = inputs.medicalPerGoat * totalGoats;
   const laborCost = inputs.laborDaily * inputs.rearingDays;
   const miscCost = inputs.miscDaily * inputs.rearingDays;
   const operationalCost = feedCost + medicalCost + laborCost + miscCost;
 
-  const lostGoats = inputs.numGoats - survivingGoats;
+  const lostGoats = totalGoats - survivingGoats;
   const lostGoatsCost = lostGoats * inputs.costPerLostGoat;
   const additionalCost = inputs.splitwiseCost + lostGoatsCost;
 
   const totalInvestment = acquisitionCost + operationalCost + additionalCost;
 
-  // Distribute surviving goats across tiers in order
+  // Distribute surviving goats across selling tiers in order
   let remainingGoats = survivingGoats;
   let totalRevenue = 0;
   for (const batch of inputs.sellingBatches) {
@@ -112,6 +119,7 @@ export function calculate(inputs: GoatInputs): CalculationResult {
   const breakEven = totalGoatsSold > 0 ? totalInvestment / totalGoatsSold : 0;
 
   return {
+    totalGoats,
     survivingGoats,
     acquisitionCost,
     feedCost,
@@ -119,6 +127,9 @@ export function calculate(inputs: GoatInputs): CalculationResult {
     laborCost,
     miscCost,
     operationalCost,
+    lostGoats,
+    lostGoatsCost,
+    additionalCost,
     totalInvestment,
     totalRevenue,
     netProfit,
@@ -126,9 +137,6 @@ export function calculate(inputs: GoatInputs): CalculationResult {
     breakEven,
     totalGoatsSold,
     unsoldGoats,
-    lostGoats,
-    lostGoatsCost,
-    additionalCost,
   };
 }
 
@@ -136,19 +144,21 @@ export function getCostBreakdown(
   inputs: GoatInputs,
   result: CalculationResult
 ): CostBreakdownRow[] {
+  const buyingRows: CostBreakdownRow[] = inputs.buyingBatches.map((b, i) => ({
+    label: `Goat Purchase Tier ${i + 1} (${b.quantity} × ₹${b.pricePerGoat.toLocaleString()})`,
+    amount: b.quantity * b.pricePerGoat,
+    category: "acquisition",
+  }));
+
   return [
-    {
-      label: `Goat Purchase (${inputs.numGoats} × ₹${inputs.costPerGoat.toLocaleString()})`,
-      amount: inputs.numGoats * inputs.costPerGoat,
-      category: "acquisition",
-    },
+    ...buyingRows,
     {
       label: "Transport & Loading",
       amount: inputs.transportFees,
       category: "acquisition",
     },
     {
-      label: `Feed/Fodder (${inputs.rearingDays} days × ${inputs.numGoats} goats)`,
+      label: `Feed/Fodder (${inputs.rearingDays} days × ${result.totalGoats} goats)`,
       amount: result.feedCost,
       category: "operational",
     },
@@ -203,7 +213,7 @@ export function buildSummaryText(
       : `across ${inputs.sellingBatches.length} price tiers`;
   return (
     `You are investing ${formatCurrency(result.totalInvestment)} to rear ` +
-    `${inputs.numGoats} goats over ${inputs.rearingDays} day${inputs.rearingDays !== 1 ? "s" : ""}. ` +
+    `${result.totalGoats} goats over ${inputs.rearingDays} day${inputs.rearingDays !== 1 ? "s" : ""}. ` +
     `With a ${inputs.mortalityRate}% mortality rate, ${result.survivingGoats} goats are expected to survive. ` +
     `Selling ${result.totalGoatsSold} goats ${tierDesc} yields a ` +
     `net ${profit} of ${formatCurrency(result.netProfit)} (ROI: ${formatROI(result.roi)}).`
@@ -214,7 +224,11 @@ export function buildClipboardText(
   inputs: GoatInputs,
   result: CalculationResult
 ): string {
-  const tierLines = inputs.sellingBatches.map(
+  const buyingLines = inputs.buyingBatches.map(
+    (b, i) =>
+      `  Tier ${i + 1}: ${b.quantity} goats @ ${formatCurrency(b.pricePerGoat)} = ${formatCurrency(b.quantity * b.pricePerGoat)}`
+  );
+  const sellingLines = inputs.sellingBatches.map(
     (b, i) =>
       `  Tier ${i + 1}: ${b.quantity} goats @ ${formatCurrency(b.pricePerGoat)} = ${formatCurrency(b.quantity * b.pricePerGoat)}`
   );
@@ -225,14 +239,16 @@ export function buildClipboardText(
     "",
     "--- Cost Breakdown ---",
     `Acquisition Cost:   ${formatCurrency(result.acquisitionCost)}`,
+    ...buyingLines,
     `Operational Cost:   ${formatCurrency(result.operationalCost)}`,
     `Additional Cost:    ${formatCurrency(result.additionalCost)}`,
     `Total Investment:   ${formatCurrency(result.totalInvestment)}`,
     "",
     "--- Revenue ---",
+    `Total Goats:        ${result.totalGoats}`,
     `Surviving Goats:    ${result.survivingGoats}`,
     `Goats Sold:         ${result.totalGoatsSold}`,
-    ...tierLines,
+    ...sellingLines,
     `Total Revenue:      ${formatCurrency(result.totalRevenue)}`,
     "",
     "--- Results ---",
