@@ -2,8 +2,15 @@
 
 export interface BuyingBatch {
   id: string;
+  // Acquisition
   quantity: number;
   pricePerGoat: number;
+  // Operational (per batch)
+  rearingDays: number;
+  feedPerGoatPerDay: number;
+  medicalPerGoat: number;
+  laborDaily: number;
+  miscDaily: number;
 }
 
 export interface SellingBatch {
@@ -13,24 +20,10 @@ export interface SellingBatch {
 }
 
 export interface GoatInputs {
-  // Acquisition
   buyingBatches: BuyingBatch[];
   transportFees: number;
-
-  // Operational (all daily rates)
-  feedPerGoatPerDay: number;
-  medicalPerGoat: number;
-  laborDaily: number;
-  miscDaily: number;
-
-  // Timeframe
-  rearingDays: number;
-
-  // Additional
   splitwiseCost: number;
   costPerLostGoat: number;
-
-  // Revenue
   sellingBatches: SellingBatch[];
   mortalityRate: number;
 }
@@ -65,13 +58,19 @@ export interface CostBreakdownRow {
 // ─── Defaults ────────────────────────────────────────────────────────────────
 
 export const DEFAULT_INPUTS: GoatInputs = {
-  buyingBatches: [{ id: "default-buy", quantity: 100, pricePerGoat: 9800 }],
+  buyingBatches: [
+    {
+      id: "default-buy",
+      quantity: 100,
+      pricePerGoat: 9800,
+      rearingDays: 25,
+      feedPerGoatPerDay: 20,
+      medicalPerGoat: 0,
+      laborDaily: 800,
+      miscDaily: 0,
+    },
+  ],
   transportFees: 15000,
-  feedPerGoatPerDay: 20,
-  medicalPerGoat: 0,
-  laborDaily: 800,
-  miscDaily: 0,
-  rearingDays: 25,
   splitwiseCost: 0,
   costPerLostGoat: 0,
   sellingBatches: [{ id: "default-sell", quantity: 100, pricePerGoat: 13500 }],
@@ -90,10 +89,13 @@ export function calculate(inputs: GoatInputs): CalculationResult {
   );
   const acquisitionCost = goatPurchaseCost + inputs.transportFees;
 
-  const feedCost = inputs.feedPerGoatPerDay * totalGoats * inputs.rearingDays;
-  const medicalCost = inputs.medicalPerGoat * totalGoats;
-  const laborCost = inputs.laborDaily * inputs.rearingDays;
-  const miscCost = inputs.miscDaily * inputs.rearingDays;
+  let feedCost = 0, medicalCost = 0, laborCost = 0, miscCost = 0;
+  for (const b of inputs.buyingBatches) {
+    feedCost    += b.feedPerGoatPerDay * b.quantity * b.rearingDays;
+    medicalCost += b.medicalPerGoat * b.quantity;
+    laborCost   += b.laborDaily * b.rearingDays;
+    miscCost    += b.miscDaily * b.rearingDays;
+  }
   const operationalCost = feedCost + medicalCost + laborCost + miscCost;
 
   const lostGoats = totalGoats - survivingGoats;
@@ -102,7 +104,6 @@ export function calculate(inputs: GoatInputs): CalculationResult {
 
   const totalInvestment = acquisitionCost + operationalCost + additionalCost;
 
-  // Distribute surviving goats across selling tiers in order
   let remainingGoats = survivingGoats;
   let totalRevenue = 0;
   for (const batch of inputs.sellingBatches) {
@@ -119,24 +120,11 @@ export function calculate(inputs: GoatInputs): CalculationResult {
   const breakEven = totalGoatsSold > 0 ? totalInvestment / totalGoatsSold : 0;
 
   return {
-    totalGoats,
-    survivingGoats,
-    acquisitionCost,
-    feedCost,
-    medicalCost,
-    laborCost,
-    miscCost,
-    operationalCost,
-    lostGoats,
-    lostGoatsCost,
-    additionalCost,
-    totalInvestment,
-    totalRevenue,
-    netProfit,
-    roi,
-    breakEven,
-    totalGoatsSold,
-    unsoldGoats,
+    totalGoats, survivingGoats, acquisitionCost,
+    feedCost, medicalCost, laborCost, miscCost, operationalCost,
+    lostGoats, lostGoatsCost, additionalCost,
+    totalInvestment, totalRevenue, netProfit, roi, breakEven,
+    totalGoatsSold, unsoldGoats,
   };
 }
 
@@ -144,89 +132,71 @@ export function getCostBreakdown(
   inputs: GoatInputs,
   result: CalculationResult
 ): CostBreakdownRow[] {
-  const buyingRows: CostBreakdownRow[] = inputs.buyingBatches.map((b, i) => ({
-    label: `Goat Purchase Tier ${i + 1} (${b.quantity} × ₹${b.pricePerGoat.toLocaleString()})`,
-    amount: b.quantity * b.pricePerGoat,
-    category: "acquisition",
-  }));
+  const rows: CostBreakdownRow[] = [];
+  const multi = inputs.buyingBatches.length > 1;
 
-  return [
-    ...buyingRows,
-    {
-      label: "Transport & Loading",
-      amount: inputs.transportFees,
+  // Acquisition rows
+  inputs.buyingBatches.forEach((b, i) => {
+    rows.push({
+      label: `${multi ? `Batch ${i + 1} – ` : ""}Goat Purchase (${b.quantity} × ₹${b.pricePerGoat.toLocaleString()})`,
+      amount: b.quantity * b.pricePerGoat,
       category: "acquisition",
-    },
-    {
-      label: `Feed/Fodder (${inputs.rearingDays} days × ${result.totalGoats} goats)`,
-      amount: result.feedCost,
-      category: "operational",
-    },
-    {
-      label: "Medical & Vaccination",
-      amount: result.medicalCost,
-      category: "operational",
-    },
-    {
-      label: `Labor (${inputs.rearingDays} days × ₹${inputs.laborDaily}/day)`,
-      amount: result.laborCost,
-      category: "operational",
-    },
-    {
-      label: `Miscellaneous (${inputs.rearingDays} days × ₹${inputs.miscDaily}/day)`,
-      amount: result.miscCost,
-      category: "operational",
-    },
-    {
-      label: "Splitwise Cost",
-      amount: inputs.splitwiseCost,
-      category: "additional",
-    },
-    {
-      label: `Goats Lost Cost (${result.lostGoats} goats × ₹${inputs.costPerLostGoat.toLocaleString()})`,
-      amount: result.lostGoatsCost,
-      category: "additional",
-    },
-  ];
+    });
+  });
+  rows.push({ label: "Transport & Loading", amount: inputs.transportFees, category: "acquisition" });
+
+  // Operational rows per batch
+  inputs.buyingBatches.forEach((b, i) => {
+    const p = multi ? `Batch ${i + 1} – ` : "";
+    rows.push({ label: `${p}Feed/Fodder (${b.rearingDays}d × ${b.quantity} goats)`, amount: b.feedPerGoatPerDay * b.quantity * b.rearingDays, category: "operational" });
+    rows.push({ label: `${p}Medical & Vaccination`,                                   amount: b.medicalPerGoat * b.quantity,                    category: "operational" });
+    rows.push({ label: `${p}Labor (${b.rearingDays}d × ₹${b.laborDaily}/day)`,       amount: b.laborDaily * b.rearingDays,                     category: "operational" });
+    rows.push({ label: `${p}Misc (${b.rearingDays}d × ₹${b.miscDaily}/day)`,         amount: b.miscDaily * b.rearingDays,                      category: "operational" });
+  });
+
+  // Additional
+  rows.push({ label: "Splitwise Cost", amount: inputs.splitwiseCost, category: "additional" });
+  rows.push({
+    label: `Goats Lost Cost (${result.lostGoats} × ₹${inputs.costPerLostGoat.toLocaleString()})`,
+    amount: result.lostGoatsCost,
+    category: "additional",
+  });
+
+  return rows;
 }
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
 export function formatCurrency(value: number): string {
-  return `₹${Math.abs(value).toLocaleString("en-IN", {
-    maximumFractionDigits: 0,
-  })}`;
+  return `₹${Math.abs(value).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
 export function formatROI(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
-export function buildSummaryText(
-  inputs: GoatInputs,
-  result: CalculationResult
-): string {
+export function buildSummaryText(inputs: GoatInputs, result: CalculationResult): string {
   const profit = result.netProfit >= 0 ? "profit" : "loss";
+  const days = inputs.buyingBatches.map((b) => b.rearingDays);
+  const minD = Math.min(...days), maxD = Math.max(...days);
+  const periodDesc = minD === maxD ? `${minD} day${minD !== 1 ? "s" : ""}` : `${minD}–${maxD} days`;
   const tierDesc =
     inputs.sellingBatches.length === 1
       ? `at ${formatCurrency(inputs.sellingBatches[0].pricePerGoat)} per goat`
       : `across ${inputs.sellingBatches.length} price tiers`;
   return (
     `You are investing ${formatCurrency(result.totalInvestment)} to rear ` +
-    `${result.totalGoats} goats over ${inputs.rearingDays} day${inputs.rearingDays !== 1 ? "s" : ""}. ` +
+    `${result.totalGoats} goats over ${periodDesc}. ` +
     `With a ${inputs.mortalityRate}% mortality rate, ${result.survivingGoats} goats are expected to survive. ` +
     `Selling ${result.totalGoatsSold} goats ${tierDesc} yields a ` +
     `net ${profit} of ${formatCurrency(result.netProfit)} (ROI: ${formatROI(result.roi)}).`
   );
 }
 
-export function buildClipboardText(
-  inputs: GoatInputs,
-  result: CalculationResult
-): string {
+export function buildClipboardText(inputs: GoatInputs, result: CalculationResult): string {
   const buyingLines = inputs.buyingBatches.map(
     (b, i) =>
-      `  Tier ${i + 1}: ${b.quantity} goats @ ${formatCurrency(b.pricePerGoat)} = ${formatCurrency(b.quantity * b.pricePerGoat)}`
+      `  Tier ${i + 1}: ${b.quantity} goats @ ${formatCurrency(b.pricePerGoat)}, ${b.rearingDays}d rearing = ${formatCurrency(b.quantity * b.pricePerGoat)}`
   );
   const sellingLines = inputs.sellingBatches.map(
     (b, i) =>
