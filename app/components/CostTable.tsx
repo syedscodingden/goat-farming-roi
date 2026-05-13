@@ -14,6 +14,7 @@ interface CostTableProps {
 export function CostTable({ rows, result }: CostTableProps) {
   const acquisitionRows = rows.filter((r) => r.category === "acquisition");
   const operationalRows = rows.filter((r) => r.category === "operational");
+  const additionalRows = rows.filter((r) => r.category === "additional");
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-800/50 overflow-hidden">
@@ -35,6 +36,12 @@ export function CostTable({ rows, result }: CostTableProps) {
           rows={operationalRows}
           subtotal={result.operationalCost}
           accent="text-amber-400"
+        />
+        <CostGroup
+          label="Additional Costs"
+          rows={additionalRows}
+          subtotal={result.additionalCost}
+          accent="text-rose-400"
         />
 
         {/* Total Row */}

@@ -6,6 +6,7 @@ import {
   Wrench,
   Clock,
   TrendingUp,
+  Layers,
   X,
   Plus,
 } from "lucide-react";
@@ -169,6 +170,29 @@ export default function Page() {
                   suffix="days"
                 />
               </InputRow>
+            </InputSection>
+
+            {/* Additional Costs */}
+            <InputSection title="Additional Costs" icon={Layers}>
+              <div className="grid grid-cols-2 gap-4">
+                <InputRow label="Splitwise Cost" hint="shared expenses">
+                  <NumberInput
+                    value={inputs.splitwiseCost}
+                    onChange={(v) => set("splitwiseCost", v)}
+                    prefix="₹"
+                  />
+                </InputRow>
+                <InputRow
+                  label="Cost per Lost Goat"
+                  hint={`${inputs.numGoats - result.survivingGoats} goats lost`}
+                >
+                  <NumberInput
+                    value={inputs.costPerLostGoat}
+                    onChange={(v) => set("costPerLostGoat", v)}
+                    prefix="₹"
+                  />
+                </InputRow>
+              </div>
             </InputSection>
 
             {/* Revenue */}

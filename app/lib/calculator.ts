@@ -24,6 +24,10 @@ export interface GoatInputs {
   // Revenue
   sellingBatches: SellingBatch[];
   mortalityRate: number;
+
+  // Additional
+  splitwiseCost: number;
+  costPerLostGoat: number;
 }
 
 export interface CalculationResult {
@@ -41,12 +45,15 @@ export interface CalculationResult {
   breakEven: number;
   totalGoatsSold: number;
   unsoldGoats: number;
+  lostGoats: number;
+  lostGoatsCost: number;
+  additionalCost: number;
 }
 
 export interface CostBreakdownRow {
   label: string;
   amount: number;
-  category: "acquisition" | "operational";
+  category: "acquisition" | "operational" | "additional";
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -62,6 +69,8 @@ export const DEFAULT_INPUTS: GoatInputs = {
   rearingDays: 25,
   sellingBatches: [{ id: "default", quantity: 100, pricePerGoat: 13500 }],
   mortalityRate: 0,
+  splitwiseCost: 0,
+  costPerLostGoat: 0,
 };
 
 // ─── Core Calculation Logic ───────────────────────────────────────────────────
@@ -80,7 +89,11 @@ export function calculate(inputs: GoatInputs): CalculationResult {
   const miscCost = inputs.miscDaily * inputs.rearingDays;
   const operationalCost = feedCost + medicalCost + laborCost + miscCost;
 
-  const totalInvestment = acquisitionCost + operationalCost;
+  const lostGoats = inputs.numGoats - survivingGoats;
+  const lostGoatsCost = lostGoats * inputs.costPerLostGoat;
+  const additionalCost = inputs.splitwiseCost + lostGoatsCost;
+
+  const totalInvestment = acquisitionCost + operationalCost + additionalCost;
 
   // Distribute surviving goats across tiers in order
   let remainingGoats = survivingGoats;
@@ -113,6 +126,9 @@ export function calculate(inputs: GoatInputs): CalculationResult {
     breakEven,
     totalGoatsSold,
     unsoldGoats,
+    lostGoats,
+    lostGoatsCost,
+    additionalCost,
   };
 }
 
@@ -150,6 +166,16 @@ export function getCostBreakdown(
       label: `Miscellaneous (${inputs.rearingDays} days × ₹${inputs.miscDaily}/day)`,
       amount: result.miscCost,
       category: "operational",
+    },
+    {
+      label: "Splitwise Cost",
+      amount: inputs.splitwiseCost,
+      category: "additional",
+    },
+    {
+      label: `Goats Lost Cost (${result.lostGoats} goats × ₹${inputs.costPerLostGoat.toLocaleString()})`,
+      amount: result.lostGoatsCost,
+      category: "additional",
     },
   ];
 }
@@ -200,6 +226,7 @@ export function buildClipboardText(
     "--- Cost Breakdown ---",
     `Acquisition Cost:   ${formatCurrency(result.acquisitionCost)}`,
     `Operational Cost:   ${formatCurrency(result.operationalCost)}`,
+    `Additional Cost:    ${formatCurrency(result.additionalCost)}`,
     `Total Investment:   ${formatCurrency(result.totalInvestment)}`,
     "",
     "--- Revenue ---",
